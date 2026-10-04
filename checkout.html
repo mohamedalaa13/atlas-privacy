@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas — Checkout</title>
+
+<!--
+  Atlas checkout host.
+
+  WHY THIS PAGE EXISTS
+  --------------------
+  Paddle Billing's POST /transactions does not return a ready-made hosted
+  checkout. It returns `checkout.url` = <your default payment link> + "?_ptxn=<id>",
+  and expects THAT page to load Paddle.js and open the overlay itself.
+
+  Point the default payment link at a page without Paddle.js — a privacy
+  policy, say — and the customer is sent somewhere that simply renders, with
+  no error anywhere. The transaction exists, the money never moves.
+
+  So: Paddle → Checkout → Settings → Default payment link must be
+      https://mohamedalaa13.github.io/atlas-privacy/checkout.html
+
+  THE TOKEN BELOW IS NOT A SECRET.
+  Paddle client-side tokens are designed to ship in a public web page. They
+  can only open a checkout for a transaction that already exists. The API key
+  (pdl_*_apikey_) is the secret one and lives in Secret Manager, never here.
+-->
+
+<style>
+  :root { --ink:#0F172A; --muted:#64748B; --blue:#2D5BFF; --violet:#7C3AED; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body {
+    margin:0; display:flex; align-items:center; justify-content:center;
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    color:var(--ink); background:#F7F9FF; padding:24px;
+  }
+  .card {
+    max-width:420px; width:100%; text-align:center;
+    background:#fff; border-radius:22px; padding:40px 28px;
+    box-shadow:0 10px 40px rgba(15,23,42,.08);
+  }
+  .mark {
+    width:56px; height:56px; border-radius:17px; margin:0 auto 20px;
+    background:linear-gradient(135deg,var(--blue),var(--violet));
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-weight:800; font-size:22px; letter-spacing:1px;
+  }
+  h1 { font-size:21px; margin:0 0 8px; letter-spacing:-.3px; }
+  p  { color:var(--muted); font-size:14px; margin:0; }
+  .spinner {
+    width:26px; height:26px; margin:22px auto 0;
+    border:3px solid #E2E8F4; border-top-color:var(--blue);
+    border-radius:50%; animation:spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .err { display:none; margin-top:18px; font-size:13.5px; color:#B42318; }
+  .err a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="mark">A</div>
+  <h1 id="title">Opening secure checkout…</h1>
+  <p id="sub">Paddle handles the payment. Atlas never sees your card.</p>
+  <div class="spinner" id="spinner"></div>
+  <div class="err" id="err"></div>
+</div>
+
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+<script>
+  // ---- fill these two in -------------------------------------------------
+  // Paddle → Developer tools → Authentication → Client-side tokens → New
+  const PADDLE_CLIENT_TOKEN = 'test_cfa45686da6d6f9df5acf0477b3';
+  // 'sandbox' while testing, 'production' when you switch PADDLE_ENV
+  const PADDLE_ENVIRONMENT  = 'sandbox';
+  // ------------------------------------------------------------------------
+
+  function fail(msg) {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('title').textContent = 'Could not open checkout';
+    document.getElementById('sub').textContent = '';
+    const e = document.getElementById('err');
+    e.style.display = 'block';
+    e.innerHTML = msg +
+      '<br><br>Go back to Atlas and try again, or email ' +
+      '<a href="mailto:mohmd46alaa@gmail.com">mohmd46alaa@gmail.com</a>.';
+  }
+
+  // Paddle puts the transaction id in ?_ptxn= when it redirects here.
+  const txn = new URLSearchParams(window.location.search).get('_ptxn');
+
+  if (!txn) {
+    // Someone opened this page directly rather than being sent by Paddle.
+    fail('This page is the payment step and was opened without a transaction.');
+  } else if (PADDLE_CLIENT_TOKEN.startsWith('REPLACE')) {
+    fail('This checkout page has not been configured with a Paddle client token yet.');
+  } else {
+    try {
+      if (PADDLE_ENVIRONMENT === 'sandbox') Paddle.Environment.set('sandbox');
+      Paddle.Initialize({
+        token: PADDLE_CLIENT_TOKEN,
+        eventCallback: function (data) {
+          if (data.name === 'checkout.completed') {
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('title').textContent = 'Payment received';
+            document.getElementById('sub').textContent =
+              'You can close this tab and return to Atlas — it unlocks on its own.';
+          }
+        },
+      });
+      // Overlay rather than inline: this page is a launcher, not a storefront.
+      Paddle.Checkout.open({ transactionId: txn });
+    } catch (e) {
+      fail('Paddle could not start: ' + (e && e.message ? e.message : e));
+    }
+  }
+</script>
+</body>
+</html>
